@@ -43,7 +43,7 @@
 
 # Arduino ライブラリのインストール
 
-1. GitHub リポジトリ( https://github.com/ABIT-crop/AK-030 )をブラウザで開き、「Clone or Download」ボタンをクリック。さらに「Donwload ZIP」をクリックして、AK-030-master.zip をローカル PC にダウンロードする。
+1. GitHub リポジトリ( https://github.com/ABIT-crop/AK-030-Arduino )をブラウザで開き、「Clone or Download」ボタンをクリック。さらに「Donwload ZIP」をクリックして、AK-030-master.zip をローカル PC にダウンロードする。
 1. Arduino IDE の"Sketch"-"Include Library"から"Add .ZIP Library"を選択して、ダウンロードした AK-030-master.zip を指定。
 1. 以後、"File"-"Examples"-"AK-030"からサンプルプログラムを開けるようになる。
 
