@@ -121,8 +121,11 @@ AK030::AK030() {
  * @brief AK030 preparation to connect
  *
  * @param apn : APN string
+ * @param user : user
+ * @param passwd : password
+ * @param pppauth: PAP/CHAP/NONE
  */
-void AK030::begin(const char *apn) {
+void AK030::begin(const char *apn, const char *user, const char *passwd, const char *pppauth) {
   if (debug) {
     Serial.println();
     Serial.printf("****************\n");
@@ -138,9 +141,32 @@ void AK030::begin(const char *apn) {
   send_at_cmd("ATE0");
   wait_at_cmd_result();
 
+  if (strlen(pppauth) > 0) {
+    if (strcmp(pppauth, "PAP") == 0 || strcmp(pppauth, "CHAP") == 0 || strcmp(pppauth, "NONE") == 0) {
+      // ok
+    } else {
+      m_cmd_ok = false;
+      if (debug) {
+        Serial.printf("Invalid pppauth : '%s' !", pppauth);
+      }
+      return;
+    }
+  }
+
+#if 0
   snprintf(cmd_buffer, sizeof(cmd_buffer), "AT+CGDCONT=1,\"IP\",\"%s\"", apn);
   send_at_cmd();
   wait_at_cmd_result();
+#else
+  snprintf(cmd_buffer, sizeof(cmd_buffer), "AT%%PDNSET=1,\"%s\",\"%s\",\"%s\",\"%s\",\"%s\"", apn, "IP", pppauth, user,
+           passwd);
+  send_at_cmd();
+  wait_at_cmd_result(10);
+  if (is_at_cmd_ng()) {
+    m_cmd_ok = false;
+    return;
+  }
+#endif
 
   send_at_cmd("AT+CFUN=0");
   wait_at_cmd_result();
@@ -872,9 +898,17 @@ int AK030::getRSSI() {
     delay(1000 * 3);
     return -999;
   }
-  char *p = strstr(cmd_buffer, "RSSI = ");
-  if (!p) {
+
+  char *p;
+  p = strstr(cmd_buffer, "RSSI = N/A");
+  if (p != NULL) {
     if (debug) Serial.println("* getRSSI(): ERROR 2");
+    m_cmd_ok = false;
+    return -999;
+  }
+  p = strstr(cmd_buffer, "RSSI = ");
+  if (p == NULL) {
+    if (debug) Serial.println("* getRSSI(): ERROR 3");
     m_cmd_ok = false;
     return -999;
   }

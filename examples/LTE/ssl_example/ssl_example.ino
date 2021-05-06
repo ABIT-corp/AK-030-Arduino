@@ -1,64 +1,85 @@
 #include "AK-030.h"
 #include "Arduino.h"
 
-#define APN "soracom.io"
-//#define SERVER  "www.howsmyssl.com"
-#define SERVER  "httpstat.us"
-#define PORT    443
-#define CERT_NO 3
+#define SORACOM
+//#define IIJ
+
+#ifdef SORACOM
+#define APN     "soracom.io"
+#define USER    "sora"
+#define PASSWD  "sora"
+#define PPPAUTH "PAP"
+#endif
+
+#ifdef IIJ
+#define APN     "iijmio.jp"
+#define USER    "mio@iij"
+#define PASSWD  "iij"
+#define PPPAUTH "PAP"
+#endif
+
+// GET https://httpbin.org/ip
+#define SERVER "httpbin.org"
+#define PORT   443
+#define URI    "/ip"
+
+#define LOOP_INTERVAL         (1000 * 60)
+#define LOOP_INTERVAL_WHEN_NG (1000 * 5)
 
 #define _LF "\x0a"  // pseudo line feed for PEM format
 
+#define CERT_NO 3
+
 // clang-format off
-const char cert_data[] =
-  "-----BEGIN CERTIFICATE-----" _LF
-  "MIIDdzCCAl+gAwIBAgIEAgAAuTANBgkqhkiG9w0BAQUFADBaMQswCQYDVQQGEwJJ" _LF
-  "RTESMBAGA1UEChMJQmFsdGltb3JlMRMwEQYDVQQLEwpDeWJlclRydXN0MSIwIAYD" _LF
-  "VQQDExlCYWx0aW1vcmUgQ3liZXJUcnVzdCBSb290MB4XDTAwMDUxMjE4NDYwMFoX" _LF
-  "DTI1MDUxMjIzNTkwMFowWjELMAkGA1UEBhMCSUUxEjAQBgNVBAoTCUJhbHRpbW9y" _LF
-  "ZTETMBEGA1UECxMKQ3liZXJUcnVzdDEiMCAGA1UEAxMZQmFsdGltb3JlIEN5YmVy" _LF
-  "VHJ1c3QgUm9vdDCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAKMEuyKr" _LF
-  "mD1X6CZymrV51Cni4eiVgLGw41uOKymaZN+hXe2wCQVt2yguzmKiYv60iNoS6zjr" _LF
-  "IZ3AQSsBUnuId9Mcj8e6uYi1agnnc+gRQKfRzMpijS3ljwumUNKoUMMo6vWrJYeK" _LF
-  "mpYcqWe4PwzV9/lSEy/CG9VwcPCPwBLKBsua4dnKM3p31vjsufFoREJIE9LAwqSu" _LF
-  "XmD+tqYF/LTdB1kC1FkYmGP1pWPgkAx9XbIGevOF6uvUA65ehD5f/xXtabz5OTZy" _LF
-  "dc93Uk3zyZAsuT3lySNTPx8kmCFcB5kpvcY67Oduhjprl3RjM71oGDHweI12v/ye" _LF
-  "jl0qhqdNkNwnGjkCAwEAAaNFMEMwHQYDVR0OBBYEFOWdWTCCR1jMrPoIVDaGezq1" _LF
-  "BE3wMBIGA1UdEwEB/wQIMAYBAf8CAQMwDgYDVR0PAQH/BAQDAgEGMA0GCSqGSIb3" _LF
-  "DQEBBQUAA4IBAQCFDF2O5G9RaEIFoN27TyclhAO992T9Ldcw46QQF+vaKSm2eT92" _LF
-  "9hkTI7gQCvlYpNRhcL0EYWoSihfVCr3FvDB81ukMJY2GQE/szKN+OMY3EU/t3Wgx" _LF
-  "jkzSswF07r51XgdIGn9w/xZchMB5hbgF/X++ZRGjD8ACtPhSNzkE1akxehi/oCr0" _LF
-  "Epn3o0WC4zxe9Z2etciefC7IpJ5OCBRLbf1wbWsaY71k5h+3zvDyny67G7fyUIhz" _LF
-  "ksLi4xaNmjICq44Y3ekQEe5+NauQrz4wlHrQMz2nZQ/1/I6eYs9HRCwBXbsdtTLS" _LF
-  "R9I4LtD+gdwyah617jzV/OeBHRnDJELqYzmp" _LF
-  "-----END CERTIFICATE-----";
-// clang-format on
+const char cert_data_amazon_root_ca_1[] =
+"-----BEGIN CERTIFICATE-----" _LF
+"MIIDQTCCAimgAwIBAgITBmyfz5m/jAo54vB4ikPmljZbyjANBgkqhkiG9w0BAQsF" _LF
+"ADA5MQswCQYDVQQGEwJVUzEPMA0GA1UEChMGQW1hem9uMRkwFwYDVQQDExBBbWF6" _LF
+"b24gUm9vdCBDQSAxMB4XDTE1MDUyNjAwMDAwMFoXDTM4MDExNzAwMDAwMFowOTEL" _LF
+"MAkGA1UEBhMCVVMxDzANBgNVBAoTBkFtYXpvbjEZMBcGA1UEAxMQQW1hem9uIFJv" _LF
+"b3QgQ0EgMTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBALJ4gHHKeNXj" _LF
+"ca9HgFB0fW7Y14h29Jlo91ghYPl0hAEvrAIthtOgQ3pOsqTQNroBvo3bSMgHFzZM" _LF
+"9O6II8c+6zf1tRn4SWiw3te5djgdYZ6k/oI2peVKVuRF4fn9tBb6dNqcmzU5L/qw" _LF
+"IFAGbHrQgLKm+a/sRxmPUDgH3KKHOVj4utWp+UhnMJbulHheb4mjUcAwhmahRWa6" _LF
+"VOujw5H5SNz/0egwLX0tdHA114gk957EWW67c4cX8jJGKLhD+rcdqsq08p8kDi1L" _LF
+"93FcXmn/6pUCyziKrlA4b9v7LWIbxcceVOF34GfID5yHI9Y/QCB/IIDEgEw+OyQm" _LF
+"jgSubJrIqg0CAwEAAaNCMEAwDwYDVR0TAQH/BAUwAwEB/zAOBgNVHQ8BAf8EBAMC" _LF
+"AYYwHQYDVR0OBBYEFIQYzIU07LwMlJQuCFmcx7IQTgoIMA0GCSqGSIb3DQEBCwUA" _LF
+"A4IBAQCY8jdaQZChGsV2USggNiMOruYou6r4lK5IpDB/G/wkjUu0yKGX9rbxenDI" _LF
+"U5PMCCjjmCXPI6T53iHTfIUJrU6adTrCC2qJeHZERxhlbI1Bjjt/msv0tadQ1wUs" _LF
+"N+gDS63pYaACbvXy8MWy7Vu33PqUXHeeE6V/Uq2V8viTO96LXFvKWlJbYK8U90vv" _LF
+"o/ufQJVtMVT8QtPHRh8jrdkPSHCa2XV4cdFyQzR1bldZwgJcJmApzyMZFo6IQ6XU" _LF
+"5MsI+yMRQ+hDKXJioaldXgjUkK642M4UwtBV8ob2xJNDd2ZhwLnoQdeXeGADbkpy" _LF
+"rqXRfboQnoZsG4q5WTP468SQvvG5" _LF
+"-----END CERTIFICATE-----" _LF;
 
 AK030 *ak030 = new AK030();
 
 char http_response[5000];
 
-void ssl_example() {
+bool ssl_example() {
   Serial.println();
-  Serial.println("@@@@@@@@@@@@@@@@@");
-  Serial.println("SSL example start");
-  Serial.println("@@@@@@@@@@@@@@@@@");
+  Serial.println(":::::::::::::::::");
+  Serial.println(":: ssl_example ::");
+  Serial.println(":::::::::::::::::");
+  Serial.println();
+
   if (!ak030->connected()) {
     Serial.println("connecting to LTE network...");
     ak030->connect();  // connect to LTE Network
     if (!ak030->ok()) {
-      Serial.println("cannot connect LTE network");
-      return;
+      Serial.println("=> cannot connect LTE network");
+      return false;
     }
-    Serial.println("...connected");
+    Serial.println("=> connected");
   }
 
   // resolve ip address
   Serial.printf("dns lookup: %s\n", SERVER);
   const char *ipaddr = ak030->dnsLookup(SERVER);
   if (ak030->ng()) {
-    Serial.println("dns lookup failed");
-    return;
+    Serial.println("=> dns lookup failed");
+    return false;
   }
   Serial.printf("=> %s\n", ipaddr);
 
@@ -66,26 +87,26 @@ void ssl_example() {
   Serial.printf("open tcp: ipaddr=%s, port=%d\n", ipaddr, PORT);
   ak030->openSSL(ipaddr, PORT, CERT_NO);
   if (ak030->ng()) {
-    Serial.printf("cannot open tcp\n");
-    return;
+    Serial.printf("=> cannot open tcp\n");
+    return false;
   } else {
-    Serial.println("...opened");
+    Serial.println("=> opened");
   }
 
   const char req_template[] =
-      "GET /200 HTTP/1.1\r\n"
+      "GET %s HTTP/1.1\r\n"
       "Host: %s:%d\r\n"
       "Accept: application/json\r\n"
       "\r\n";
 
-  char req[128];
-  snprintf(req, sizeof(req), req_template, SERVER, PORT);
+  static char req[128];
+  snprintf(req, sizeof(req), req_template, URI, SERVER, PORT);
 
-  Serial.printf("http get start: http://%s:%d/200\n", SERVER, PORT);
+  Serial.printf("http get start: http://%s:%d%s\n", SERVER, PORT, URI);
   ak030->send(req);
   if (!ak030->ok()) {
-    Serial.println("send() failed");
-    return;
+    Serial.println("~> send() failed");
+    return false;
   }
 
   int total_size = 0;
@@ -105,16 +126,17 @@ void ssl_example() {
   if (ak030->ng()) {
     Serial.println("tcpReceive() failed");
     ak030->close();
-    return;
+    return false;
   }
 
   Serial.printf("received %d bytes\n", total_size);
-  Serial.println("===== recieved data begin =====");
+  Serial.println(">>>> received data begin >>>>");
   Serial.println(http_response);
-  Serial.println("===== recieved data end =======");
+  Serial.println("<<<< received data end <<<<");
 
   Serial.println("close tcp");
   ak030->close();
+  return true;
 }
 
 void setup() {
@@ -126,13 +148,33 @@ void setup() {
     delay(1000);
   }
 
-  ak030->debug = true;
-  ak030->begin(APN);
+  Serial.println();
+  Serial.println("@@@@@@@@@@@@@@@@@");
+  Serial.println("SSL example start");
+  Serial.println("@@@@@@@@@@@@@@@@@");
 
-  ak030->installCertificate("Baltimore_CyberTrust_Roo.crt", CERT_NO, cert_data);
+  char msg[128];
+  Serial.println();
+  snprintf(msg,sizeof(msg),"initialize AK-030 : APN='%s', USER='%s', PASSWD='%s', PPPAUTH='%s'", APN, USER, PASSWD, PPPAUTH);
+  Serial.println(msg);
+
+  // ak030->debug = true;
+  //ak030->begin(APN); // You may omit USER/PASSWRD,PPPAUTH, when apn is 'soracom.io'.
+  ak030->begin(APN, USER, PASSWD, PPPAUTH);
+
+  ak030->installCertificate("amzn_rt_ca_1.crt", CERT_NO, cert_data_amazon_root_ca_1);
 }
 
 void loop() {
-  ssl_example();
-  delay(1000 * 60 * 3);
+  char msg[64];
+  unsigned long interval = LOOP_INTERVAL; 
+  
+  bool ok = ssl_example();
+  if (!ok) {
+    interval = LOOP_INTERVAL_WHEN_NG;
+  }
+  snprintf(msg,sizeof(msg),"waiting %.1f sec...", interval / 1000.0);
+  Serial.println();
+  Serial.println(msg);
+  delay(interval);
 }

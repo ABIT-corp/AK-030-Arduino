@@ -1,5 +1,3 @@
-** 本リポジトリは作成途中のため、予告なく大幅な修正がされる可能性があります。 **
-
 # AK-030
 
 - AK-030 は ESP32 をメイン CPU とする LTE-M 対応の IoT デバイスです。
@@ -59,7 +57,8 @@ AK030 *ak030 = new AK030(); // AK030オブジェクトの生成
 setup(){
     Serial.begin(115200); // デバッグ表示用
 
-    ak030->begin("soracom.io");    // 利用するキャリア(SIMカード)のAPNを指定
+    // 利用するキャリア(SIMカード)の接続情報(APN/USER/PASSWD/PPPAUTH)を指定
+    ak030->begin("soracom.io","sora","sora","PAP");    
 }
 
 ```
@@ -113,9 +112,9 @@ void loop(){
     int n;
     ak030->receive(data, sizeof(data), &n); // TCP受信
     Serial.printf("received %d bytes\n", n);
-    Serial.println("===== recieved data begin =====");
+    Serial.println("===== received data begin =====");
     Serial.println(data);
-    Serial.println("===== recieved data end =======");
+    Serial.println("===== received data end =======");
   }
   ak030->close(); // TCPソケットを閉じる
 

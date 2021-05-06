@@ -52,10 +52,11 @@ public:
   bool ok() { return m_cmd_ok; }  // return true if previous function call suceeded
   bool ng() { return !m_cmd_ok; }
 
-  void begin(const char *apn);  // begin to connect LTE Network
-  void connect();               // connect to LTE network
-  bool connected();             // check whether connected to LTE network
-  void disconnect();            // disconnect from LTE network
+  void begin(const char *apn = "", const char *user = "", const char *passwd = "",
+             const char *pppauth = "");  // pppauth only accepts "PAP", "CHAP", "NONE"
+  void connect();                        // connect to LTE network
+  bool connected();                      // check whether connected to LTE network
+  void disconnect();                     // disconnect from LTE network
   void cleanup(int n);
 
   int getRSSI();

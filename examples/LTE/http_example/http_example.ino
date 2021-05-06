@@ -1,60 +1,82 @@
 #include "AK-030.h"
 #include "Arduino.h"
 
+#define SORACOM
+//#define IIJ
+
+#ifdef SORACOM
+#define APN     "soracom.io"
+#define USER    "sora"
+#define PASSWD  "sora"
+#define PPPAUTH "PAP"
+#endif
+
+#ifdef IIJ
+#define APN     "iijmio.jp"
+#define USER    "mio@iij"
+#define PASSWD  "iij"
+#define PPPAUTH "PAP"
+#endif
+
 #define SERVER "example.com"
 #define PORT   80
+#define URI    "/"
+
+#define LOOP_INTERVAL         (1000 * 60 * 1)
+#define LOOP_INTERVAL_WHEN_NG (1000 * 5)
 
 static char http_response[5000];
 
 AK030 *ak030 = new AK030();
 
-void http_get_example() {
+bool http_get_example() {
   Serial.println();
-  Serial.println("@@@@@@@@@@@@@@@@@@@@@@");
-  Serial.println("http get example start");
-  Serial.println("@@@@@@@@@@@@@@@@@@@@@@");
+  Serial.println("::::::::::::::::::::::::::");
+  Serial.println("::: http_get_example() :::");
+  Serial.println("::::::::::::::::::::::::::");
+  Serial.println();
 
   if (!ak030->connected()) {
     Serial.println("connecting to LTE network");
     ak030->connect();  // connect to LTE network
     if (ak030->ng()) {
-      Serial.println("cannot connect to LTE network");
-      return;
+      Serial.println("=> cannot connect to LTE network");
+      return false;
     }
-    Serial.println("...connected");
+    Serial.println("=> connected");
   }
 
   Serial.printf("dns lookup start for %s\n", SERVER);
   const char *ipaddr = ak030->dnsLookup(SERVER);
-  if (!ipaddr) {
-    Serial.println("dns lookup failed()");
-    return;
+  if (ak030->ng()) {
+    Serial.println("=> dns lookup failed()");
+    return false;
   }
   Serial.printf("=> ipaddress=%s\n", ipaddr);
 
   Serial.printf("open tcp: ipaddr=%s port=%d\n", ipaddr, PORT);
   ak030->openTcp(ipaddr, PORT);
   if (!ak030->ok()) {
-    Serial.println("cannot open tcp");
-    return;
+    Serial.println("=> cannot open tcp");
+    return false;
   }
-  Serial.println("...opened");
+  Serial.println("=> opened");
 
-  // get http://example.com:80/
   const char req_template[] =
-      "GET /200 HTTP/1.1\r\n"
+      "GET %s HTTP/1.1\r\n"
       "Host: %s:%d\r\n"
       "Accept: application/json\r\n"
       "\r\n";
 
-  char req[128];
-  snprintf(req, sizeof(req), req_template, SERVER, PORT, SERVER, PORT);
+  static char req[128];
+  snprintf(req, sizeof(req), req_template, URI, SERVER, PORT, SERVER, PORT);
 
-  Serial.printf("http get start: http://%s:%d/200\n", SERVER, PORT);
+  Serial.printf("http get start: http://%s:%d%s\n", SERVER, PORT, URI);
   ak030->send(req);
   if (!ak030->ok()) {
-    Serial.println("send() failed");
-    return;
+    Serial.println("=> send() failed");
+    ak030->close();
+    return false;
   }
 
   int total_size = 0;
@@ -66,24 +88,26 @@ void http_get_example() {
     total_size += n;
     left_size -= n;
     if (left_size <= 0) {
-      Serial.println("overflow");
+      Serial.println("=> overflow !!!");
       break;
     }
     ak030->waitEvent();
   }
   if (ak030->ng()) {
-    Serial.println("receive() failed");
+    Serial.println("=> receive() failed");
     ak030->close();
-    return;
+    return false;
   }
 
   Serial.printf("received %d bytes\n", total_size);
-  Serial.println("===== recieved data begin =====");
+  Serial.println(">>>> received data begin >>>>");
   Serial.println(http_response);
-  Serial.println("===== recieved data end =======");
+  Serial.println("<<<< received data end <<<<<<");
 
   Serial.println("close tcp");
   ak030->close();
+
+  return true;
 }
 
 void setup() {
@@ -97,11 +121,32 @@ void setup() {
     delay(1000);
   }
 
+  Serial.println();
+  Serial.println("@@@@@@@@@@@@@@@@@@@@@@");
+  Serial.println("http get example start");
+  Serial.println("@@@@@@@@@@@@@@@@@@@@@@");
+
+  char msg[128];
+  Serial.println();
+  snprintf(msg, sizeof(msg), "initialize AK-030 : APN='%s', USER='%s', PASSWD='%s', PPPAUTH='%s'", APN, USER, PASSWD,
+           PPPAUTH);
+  Serial.println(msg);
+
   // ak030->debug = 1;
-  ak030->begin("soracom.io");
+  // ak030->begin(APN); // You may omit USER,PASSWRD,PPPAUTH, when apn is 'soracom.io'.
+  ak030->begin(APN, USER, PASSWD, PPPAUTH);
 }
 
 void loop() {
-  http_get_example();
-  delay(1000 * 60 * 3);
+  char msg[64];
+  unsigned long interval = LOOP_INTERVAL;
+
+  bool ok = http_get_example();
+  if (!ok) {
+    interval = LOOP_INTERVAL_WHEN_NG;
+  }
+  snprintf(msg, sizeof(msg), "waiting %.1f sec...", interval / 1000.0);
+  Serial.println();
+  Serial.println(msg);
+  delay(interval);
 }
